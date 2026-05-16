@@ -2,8 +2,12 @@
 
 #include "device_faceMotion_layout.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
+
+#include <windows.h>
 
 #include "protocol.h"
 
@@ -57,6 +61,7 @@ void CDevice_FaceMotion_Layout::UICreate()
 
     UICreateLayoutGeneral();
     UICreateLayoutCommunication();
+    UICreateLayoutLive();
 }
 
 void CDevice_FaceMotion_Layout::UICreateLayoutGeneral()
@@ -170,16 +175,74 @@ void CDevice_FaceMotion_Layout::UICreateLayoutCommunication()
     mLayoutCommunication.SetControl("ButtonClearTarget",   mButtonClearTarget);
 }
 
+void CDevice_FaceMotion_Layout::UICreateLayoutLive()
+{
+    const int lS = 4, lH = 18;
+    const int rowW = 540;
+
+    auto rowAt = [&](const char* id, const char* anchor) {
+        if (anchor[0])
+        {
+            mLayoutLive.AddRegion(id, id,
+                lS,    kFBAttachLeft,   "",     1.0,
+                lS,    kFBAttachBottom, anchor, 1.0,
+                rowW,  kFBAttachNone,   nullptr,1.0,
+                lH,    kFBAttachNone,   nullptr,1.0);
+        }
+        else
+        {
+            mLayoutLive.AddRegion(id, id,
+                lS,    kFBAttachLeft, "",      1.0,
+                8,     kFBAttachTop,  "",      1.0,
+                rowW,  kFBAttachNone, nullptr, 1.0,
+                lH,    kFBAttachNone, nullptr, 1.0);
+        }
+    };
+
+    rowAt("LabelLiveStatus",        "");
+    rowAt("LabelLiveFrames",        "LabelLiveStatus");
+    rowAt("LabelLiveHeadRot",       "LabelLiveFrames");
+    rowAt("LabelLiveHeadPos",       "LabelLiveHeadRot");
+    rowAt("LabelLiveLeftEye",       "LabelLiveHeadPos");
+    rowAt("LabelLiveRightEye",      "LabelLiveLeftEye");
+    rowAt("LabelLiveBlendshapesHdr","LabelLiveRightEye");
+    rowAt("LabelLiveBlendshape0",   "LabelLiveBlendshapesHdr");
+    rowAt("LabelLiveBlendshape1",   "LabelLiveBlendshape0");
+    rowAt("LabelLiveBlendshape2",   "LabelLiveBlendshape1");
+    rowAt("LabelLiveBlendshape3",   "LabelLiveBlendshape2");
+    rowAt("LabelLiveBlendshape4",   "LabelLiveBlendshape3");
+    rowAt("LabelLiveBlendshape5",   "LabelLiveBlendshape4");
+    rowAt("LabelLiveBlendshape6",   "LabelLiveBlendshape5");
+    rowAt("LabelLiveBlendshape7",   "LabelLiveBlendshape6");
+
+    mLayoutLive.SetControl("LabelLiveStatus",         mLabelLiveStatus);
+    mLayoutLive.SetControl("LabelLiveFrames",         mLabelLiveFrames);
+    mLayoutLive.SetControl("LabelLiveHeadRot",        mLabelLiveHeadRot);
+    mLayoutLive.SetControl("LabelLiveHeadPos",        mLabelLiveHeadPos);
+    mLayoutLive.SetControl("LabelLiveLeftEye",        mLabelLiveLeftEye);
+    mLayoutLive.SetControl("LabelLiveRightEye",       mLabelLiveRightEye);
+    mLayoutLive.SetControl("LabelLiveBlendshapesHdr", mLabelLiveBlendshapesHdr);
+    mLayoutLive.SetControl("LabelLiveBlendshape0",    mLabelLiveBlendshape[0]);
+    mLayoutLive.SetControl("LabelLiveBlendshape1",    mLabelLiveBlendshape[1]);
+    mLayoutLive.SetControl("LabelLiveBlendshape2",    mLabelLiveBlendshape[2]);
+    mLayoutLive.SetControl("LabelLiveBlendshape3",    mLabelLiveBlendshape[3]);
+    mLayoutLive.SetControl("LabelLiveBlendshape4",    mLabelLiveBlendshape[4]);
+    mLayoutLive.SetControl("LabelLiveBlendshape5",    mLabelLiveBlendshape[5]);
+    mLayoutLive.SetControl("LabelLiveBlendshape6",    mLabelLiveBlendshape[6]);
+    mLayoutLive.SetControl("LabelLiveBlendshape7",    mLabelLiveBlendshape[7]);
+}
+
 // -- UI configuration --------------------------------------------------------
 
 void CDevice_FaceMotion_Layout::UIConfigure()
 {
     SetBorder("MainLayout", kFBStandardBorder, false, true, 1, 0, 90, 0);
-    mTabPanel.Items.SetString("General~Communication");
+    mTabPanel.Items.SetString("General~Communication~Live");
     mTabPanel.OnChange.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventTabPanelChange);
 
     UIConfigureLayoutGeneral();
     UIConfigureLayoutCommunication();
+    UIConfigureLayoutLive();
 }
 
 void CDevice_FaceMotion_Layout::UIConfigureLayoutGeneral()
@@ -236,7 +299,108 @@ void CDevice_FaceMotion_Layout::UIConfigureLayoutCommunication()
     mButtonClearTarget.OnClick.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventButtonClearTargetClick);
 }
 
-void CDevice_FaceMotion_Layout::UIRefresh() {}
+void CDevice_FaceMotion_Layout::UIConfigureLayoutLive()
+{
+    mLabelLiveStatus.Caption         = "Status: Offline";
+    mLabelLiveFrames.Caption         = "Frames received: 0";
+    mLabelLiveHeadRot.Caption        = "Head rotation : -";
+    mLabelLiveHeadPos.Caption        = "Head position : -";
+    mLabelLiveLeftEye.Caption        = "Left eye      : -";
+    mLabelLiveRightEye.Caption       = "Right eye     : -";
+    mLabelLiveBlendshapesHdr.Caption = "Top active blendshapes (sorted by magnitude):";
+    for (int i = 0; i < 8; ++i) mLabelLiveBlendshape[i].Caption = "  -";
+}
+
+void CDevice_FaceMotion_Layout::UIRefresh()
+{
+    if (!mDevice) return;
+
+    char buf[256];
+
+    // Status line: combine device Online/Live + whether packets are flowing.
+    const uint64_t frames  = mDevice->GetFrameCount();
+    const int64_t  lastMs  = mDevice->GetLastFrameTickMs();
+    const int64_t  nowMs   = static_cast<int64_t>(GetTickCount64());
+    const int64_t  ageMs   = (lastMs > 0) ? (nowMs - lastMs) : -1;
+
+    const char* state;
+    if      (!mDevice->Online)             state = "Offline";
+    else if (!mDevice->Live)               state = "Online (not Live)";
+    else if (frames == 0)                  state = "Live, no packets yet -- check Phone IP + handshake";
+    else if (ageMs >= 0 && ageMs > 1500)   state = "Live, stream stalled";
+    else                                   state = "Live, receiving";
+
+    const char* ip = mDevice->GetPhoneIp();
+    std::snprintf(buf, sizeof(buf),
+                  "Status: %s   |   Phone: %s:%d   |   Listen: %d",
+                  state,
+                  (ip && ip[0]) ? ip : "<not set>",
+                  mDevice->GetPhonePort(),
+                  mDevice->GetListenPort());
+    mLabelLiveStatus.Caption = buf;
+
+    if (lastMs > 0)
+    {
+        std::snprintf(buf, sizeof(buf),
+                      "Frames received: %llu   |   Last packet: %lld ms ago",
+                      static_cast<unsigned long long>(frames),
+                      static_cast<long long>(ageMs));
+    }
+    else
+    {
+        std::snprintf(buf, sizeof(buf), "Frames received: 0");
+    }
+    mLabelLiveFrames.Caption = buf;
+
+    double v3[3];
+    mDevice->GetHeadRotation(v3);
+    std::snprintf(buf, sizeof(buf), "Head rotation : X=%7.2f  Y=%7.2f  Z=%7.2f  deg",
+                  v3[0], v3[1], v3[2]);
+    mLabelLiveHeadRot.Caption = buf;
+
+    mDevice->GetHeadPosition(v3);
+    std::snprintf(buf, sizeof(buf), "Head position : X=%7.2f  Y=%7.2f  Z=%7.2f  cm",
+                  v3[0], v3[1], v3[2]);
+    mLabelLiveHeadPos.Caption = buf;
+
+    mDevice->GetLeftEye(v3);
+    std::snprintf(buf, sizeof(buf), "Left eye      : X=%7.2f  Y=%7.2f  Z=%7.2f  deg",
+                  v3[0], v3[1], v3[2]);
+    mLabelLiveLeftEye.Caption = buf;
+
+    mDevice->GetRightEye(v3);
+    std::snprintf(buf, sizeof(buf), "Right eye     : X=%7.2f  Y=%7.2f  Z=%7.2f  deg",
+                  v3[0], v3[1], v3[2]);
+    mLabelLiveRightEye.Caption = buf;
+
+    // Top 8 blendshapes by absolute value.
+    struct Entry { int idx; double val; };
+    Entry top[mobufacemotion::kBlendshapeCount];
+    for (uint32_t i = 0; i < mobufacemotion::kBlendshapeCount; ++i)
+    {
+        top[i].idx = static_cast<int>(i);
+        top[i].val = mDevice->GetBlendshape(static_cast<int>(i));
+    }
+    std::partial_sort(top, top + 8, top + mobufacemotion::kBlendshapeCount,
+        [](const Entry& a, const Entry& b) {
+            return std::abs(a.val) > std::abs(b.val);
+        });
+
+    for (int i = 0; i < 8; ++i)
+    {
+        if (std::abs(top[i].val) < 0.01)
+        {
+            mLabelLiveBlendshape[i].Caption = "  -";
+        }
+        else
+        {
+            std::snprintf(buf, sizeof(buf), "  %-22s : %7.2f",
+                          mobufacemotion::kArkitBlendshapes[top[i].idx],
+                          top[i].val);
+            mLabelLiveBlendshape[i].Caption = buf;
+        }
+    }
+}
 
 void CDevice_FaceMotion_Layout::UIReset()
 {
@@ -269,6 +433,7 @@ void CDevice_FaceMotion_Layout::EventTabPanelChange(HISender, HKEvent)
     {
         case 0: SetControl("MainLayout", mLayoutGeneral);       break;
         case 1: SetControl("MainLayout", mLayoutCommunication); break;
+        case 2: SetControl("MainLayout", mLayoutLive);          break;
     }
 }
 
@@ -279,8 +444,8 @@ void CDevice_FaceMotion_Layout::EventUIIdle(HISender, HKEvent)
     if (mDevice->Online && mDevice->Live)
     {
         if (mDevice->GetSetCandidate()) mDevice->SetCandidates();
-        UIRefresh();
     }
+    UIRefresh();
 }
 
 void CDevice_FaceMotion_Layout::EventEditNumberSamplingRateChange(HISender, HKEvent)

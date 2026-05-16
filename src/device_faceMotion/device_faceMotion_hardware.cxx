@@ -4,6 +4,7 @@
 
 #include <cstring>
 
+#include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
@@ -217,6 +218,8 @@ int CDevice_FaceMotion_Hardware::FetchData()
         if (ParsePacket(mBuffer, n, mProtocol, f))
         {
             mLatest = f;
+            ++mFrameCount;
+            mLastFrameTickMs = static_cast<int64_t>(GetTickCount64());
             frames = 1;
         }
     }

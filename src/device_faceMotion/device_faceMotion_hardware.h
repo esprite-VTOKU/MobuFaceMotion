@@ -60,6 +60,10 @@ public:
     int  GetNumberOfBlendshapes() const;
     double GetBlendshapeValue(int index) const;
 
+    // Diagnostics ------------------------------------------------------------
+    uint64_t GetFrameCount() const     { return mFrameCount; }
+    int64_t  GetLastFrameTickMs() const{ return mLastFrameTickMs; }
+
 private:
     bool SendHandshakeUDP();
     void CloseSockets();
@@ -87,4 +91,7 @@ private:
     char mBuffer[MOBU_FACEMOTION_RECV_BUFFER] = {};
 
     mobufacemotion::ParsedFrame mLatest;
+
+    uint64_t mFrameCount       = 0;
+    int64_t  mLastFrameTickMs  = 0;
 };

@@ -64,6 +64,15 @@ public:
 
     void SetCandidates();
 
+    // Diagnostics surface (used by the Live tab).
+    uint64_t GetFrameCount() const          { return mHardware.GetFrameCount(); }
+    int64_t  GetLastFrameTickMs() const     { return mHardware.GetLastFrameTickMs(); }
+    void     GetHeadRotation(double* o) const { mHardware.GetRotation(o); }
+    void     GetHeadPosition(double* o) const { mHardware.GetPosition(o); }
+    void     GetLeftEye(double* o) const      { mHardware.GetLeftEyeRotation(o); }
+    void     GetRightEye(double* o) const     { mHardware.GetRightEyeRotation(o); }
+    double   GetBlendshape(int i) const       { return mHardware.GetBlendshapeValue(i); }
+
     // Published, scriptable properties.
     FBPropertyDouble       SpaceScale;        // cm scale multiplier (default 100 -> *1.0)
     FBPropertyDouble       ShapeValueMult;    // blendshape weight multiplier (default 1.0)

@@ -22,9 +22,11 @@ public:
     void UICreate();
     void   UICreateLayoutGeneral();
     void   UICreateLayoutCommunication();
+    void   UICreateLayoutLive();
     void UIConfigure();
     void   UIConfigureLayoutGeneral();
     void   UIConfigureLayoutCommunication();
+    void   UIConfigureLayoutLive();
     void UIRefresh();
     void UIReset();
 
@@ -74,6 +76,16 @@ private:
         FBEdit        mEditTargetName;       // read-only display
         FBButton      mButtonAssignTarget;
         FBButton      mButtonClearTarget;
+
+    FBLayout    mLayoutLive;
+        FBLabel       mLabelLiveStatus;
+        FBLabel       mLabelLiveFrames;
+        FBLabel       mLabelLiveHeadRot;
+        FBLabel       mLabelLiveHeadPos;
+        FBLabel       mLabelLiveLeftEye;
+        FBLabel       mLabelLiveRightEye;
+        FBLabel       mLabelLiveBlendshapesHdr;
+        FBLabel       mLabelLiveBlendshape[8];
 
     FBSystem            mSystem;
     CDevice_FaceMotion* mDevice = nullptr;
