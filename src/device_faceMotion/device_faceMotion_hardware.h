@@ -107,8 +107,8 @@ private:
     int64_t  mLastFrameTickMs  = 0;
 
     bool     mRelayEnabled = false;
-    char     mRelayIp[64]  = "";
-    int      mRelayPort    = 49983;
+    char     mRelayIp[64]  = "127.0.0.1";
+    int      mRelayPort    = 49984;
     int      mRelaySocket  = 0;
     uint64_t mRelayCount   = 0;
 

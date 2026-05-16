@@ -24,15 +24,20 @@ namespace {
 
 // Encode (protocol, transport) -> Source picker index. Order matches the
 // items added in UIConfigureLayoutCommunication.
+//
+// v1 is the default and "iFacialMocap (UDP)" entry: it's the format Warudo
+// and most other receivers actually decode. v2 is exposed as an explicit
+// advanced option for users who need signed blendshape values.
 int SourceIndexFor(int protocol, int transport)
 {
     const EProtocol  p = static_cast<EProtocol>(protocol);
     const ETransport t = static_cast<ETransport>(transport);
-    if (p == EProtocol::iFacialMocapV2 && t == ETransport::UDP) return 0;
-    if (p == EProtocol::iFacialMocapV2 && t == ETransport::TCP) return 1;
+    if (p == EProtocol::iFacialMocapV1 && t == ETransport::UDP) return 0;
+    if (p == EProtocol::iFacialMocapV1 && t == ETransport::TCP) return 1;
     if (p == EProtocol::FaceMotion3D   && t == ETransport::UDP) return 2;
     if (p == EProtocol::FaceMotion3D   && t == ETransport::TCP) return 3;
-    if (p == EProtocol::iFacialMocapV1 && t == ETransport::UDP) return 4;
+    if (p == EProtocol::iFacialMocapV2 && t == ETransport::UDP) return 4;
+    if (p == EProtocol::iFacialMocapV2 && t == ETransport::TCP) return 5;
     return 0;
 }
 
@@ -42,11 +47,12 @@ void DecodeSource(int idx, EProtocol& proto, ETransport& trans)
     switch (idx)
     {
         default:
-        case 0: proto = EProtocol::iFacialMocapV2; trans = ETransport::UDP; break;
-        case 1: proto = EProtocol::iFacialMocapV2; trans = ETransport::TCP; break;
+        case 0: proto = EProtocol::iFacialMocapV1; trans = ETransport::UDP; break;
+        case 1: proto = EProtocol::iFacialMocapV1; trans = ETransport::TCP; break;
         case 2: proto = EProtocol::FaceMotion3D;   trans = ETransport::UDP; break;
         case 3: proto = EProtocol::FaceMotion3D;   trans = ETransport::TCP; break;
-        case 4: proto = EProtocol::iFacialMocapV1; trans = ETransport::UDP; break;
+        case 4: proto = EProtocol::iFacialMocapV2; trans = ETransport::UDP; break;
+        case 5: proto = EProtocol::iFacialMocapV2; trans = ETransport::TCP; break;
     }
 }
 
@@ -339,11 +345,14 @@ void CDevice_FaceMotion_Layout::UIConfigureLayoutCommunication()
 {
     mLabelSource.Caption = "Source :";
     // Order here MUST match SourceIndexFor / DecodeSource above.
-    mListSource.Items.Add("iFacialMocap (UDP)",         0);
-    mListSource.Items.Add("iFacialMocap (TCP)",         1);
-    mListSource.Items.Add("FaceMotion3D (UDP)",         2);
-    mListSource.Items.Add("FaceMotion3D (TCP)",         3);
-    mListSource.Items.Add("iFacialMocap v1 (legacy, UDP)", 4);
+    // Default item (index 0) is iFacialMocap v1 -- the format Warudo and
+    // most other downstream receivers can actually decode.
+    mListSource.Items.Add("iFacialMocap (UDP)",                       0);
+    mListSource.Items.Add("iFacialMocap (TCP)",                       1);
+    mListSource.Items.Add("FaceMotion3D (UDP)",                       2);
+    mListSource.Items.Add("FaceMotion3D (TCP)",                       3);
+    mListSource.Items.Add("iFacialMocap v2 (UDP, signed values)",     4);
+    mListSource.Items.Add("iFacialMocap v2 (TCP, signed values)",     5);
     mListSource.OnChange.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventListSourceChange);
 
     mLabelPhoneIp.Caption = "iPhone IP Address :";
@@ -562,7 +571,10 @@ void CDevice_FaceMotion_Layout::EventListSamplingTypeChange(HISender, HKEvent)
 
 void CDevice_FaceMotion_Layout::EventButtonSetCandidateClick(HISender, HKEvent)
 {
-    mDevice->SetSetCandidate(mButtonSetCandidate.State != 0);
+    // FBButton's 2-state toggle behaviour doesn't survive in MoBu 2027 (State
+    // stays 0 on click). Flip from the device's stored state instead so we
+    // work regardless of whether the visual button stays depressed.
+    mDevice->SetSetCandidate(!mDevice->GetSetCandidate());
     UIReset();
 }
 
@@ -620,7 +632,7 @@ void CDevice_FaceMotion_Layout::EventButtonClearTargetClick(HISender, HKEvent)
 
 void CDevice_FaceMotion_Layout::EventButtonRelayEnableClick(HISender, HKEvent)
 {
-    mDevice->SetRelayEnabled(mButtonRelayEnable.State != 0);
+    mDevice->SetRelayEnabled(!mDevice->GetRelayEnabled());
     UIReset();
 }
 

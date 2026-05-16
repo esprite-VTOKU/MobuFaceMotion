@@ -66,12 +66,14 @@ bool CDevice_FaceMotion::FBCreate()
     SamplingPeriod = period;
     CommType = kFBCommTypeNetworkUDP;
 
-    // Default to iFacialMocap v2 over UDP. The hardware constructor already
-    // sets these, but make defaults explicit here for clarity.
-    mHardware.SetProtocol(EProtocol::iFacialMocapV2);
+    // Default to iFacialMocap v1 (legacy '-' delimiter) over UDP. v1 is the
+    // most widely compatible format -- Warudo and most other downstream
+    // receivers only decode v1. v2 (signed values, '&' delimiter) is opt-in
+    // for users who need negative blendshape weights.
+    mHardware.SetProtocol(EProtocol::iFacialMocapV1);
     mHardware.SetTransport(ETransport::UDP);
-    mHardware.SetPhonePort(IPhonePortFor(EProtocol::iFacialMocapV2));
-    mHardware.SetListenPort(DefaultListenPortFor(EProtocol::iFacialMocapV2, ETransport::UDP));
+    mHardware.SetPhonePort(IPhonePortFor(EProtocol::iFacialMocapV1));
+    mHardware.SetListenPort(DefaultListenPortFor(EProtocol::iFacialMocapV1, ETransport::UDP));
 
     return true;
 }
