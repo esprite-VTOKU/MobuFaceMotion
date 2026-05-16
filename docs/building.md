@@ -28,10 +28,19 @@ cmake -S . -B build/2026 -G "Visual Studio 17 2022" -A x64
 cmake --build build/2026 --config Release
 ```
 
-`COPY_TO_PLUGINS` defaults to `ON`, so the resulting `.dll` is copied
-into `C:\Program Files\Autodesk\MotionBuilder 2026\bin\x64\plugins\`
-automatically. **Close MotionBuilder first** if it's running — the copy
-will fail if MoBu has the previous `.dll` loaded.
+The build produces `build/<ver>/src/device_faceMotion/Release/device_faceMotion.dll`.
+Install it into MotionBuilder's plugins folder via either:
+
+```powershell
+# Option A: self-elevating PS installer (recommended)
+.\tools\install.ps1
+
+# Option B: explicit CMake target (run from an *elevated* shell)
+cmake --build build/2026 --config Release --target install_plugin
+```
+
+Both copy the `.dll` into `<MoBu>\bin\x64\plugins\`. **Close MotionBuilder first**
+if it's running — Windows won't overwrite a loaded DLL.
 
 ## Build for a specific MoBu version
 
@@ -61,17 +70,12 @@ cmake -S . -B build/2026 -G "Visual Studio 17 2022" -A x64 `
     -DOPENREALITY_ROOT="D:/Tools/MotionBuilder 2026/OpenRealitySDK"
 ```
 
-## Disabling auto-install
+## Manual install
 
-Pass `-DCOPY_TO_PLUGINS=OFF` to leave the built `.dll` only in the
-CMake binary directory:
-
-```powershell
-cmake -S . -B build/2026 -G "Visual Studio 17 2022" -A x64 -DCOPY_TO_PLUGINS=OFF
-```
-
-The `.dll` will land in `build/2026/src/device_faceMotion/Release/device_faceMotion.dll`.
-Copy it manually into `<MoBu>\bin\x64\plugins\` when ready.
+If you'd rather not use `tools/install.ps1` or the `install_plugin` CMake
+target, copy the `.dll` yourself from
+`build/<ver>/src/device_faceMotion/Release/device_faceMotion.dll` into
+`<MoBu>\bin\x64\plugins\` (admin required).
 
 ## Verifying the install
 

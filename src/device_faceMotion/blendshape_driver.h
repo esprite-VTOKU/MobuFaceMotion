@@ -11,10 +11,9 @@
  *  face meshes). The lookup is performed once on Rebind() and cached.
  */
 
-#include "protocol.h"
+#include <fbsdk/fbsdk.h>
 
-class FBModel;
-class FBProperty;
+#include "protocol.h"
 
 namespace mobufacemotion {
 

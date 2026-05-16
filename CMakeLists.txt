@@ -24,10 +24,6 @@ set(OPENREALITY_ROOT
     "${MOBU_ROOT}/OpenRealitySDK"
     CACHE PATH "OpenRealitySDK root inside MotionBuilder")
 
-option(COPY_TO_PLUGINS
-    "Copy the built .dll into <MoBu>/bin/x64/plugins on each build"
-    ON)
-
 # --- Compiler -----------------------------------------------------------------
 
 set(CMAKE_CXX_STANDARD 17)
