@@ -42,13 +42,14 @@ public:
     void EventButtonAboutClick             (HISender pSender, HKEvent pEvent);
 
     // Communication tab
-    void EventListProtocolChange      (HISender pSender, HKEvent pEvent);
-    void EventListTransportChange     (HISender pSender, HKEvent pEvent);
+    void EventListSourceChange        (HISender pSender, HKEvent pEvent);
     void EventEditPhoneIpChange       (HISender pSender, HKEvent pEvent);
     void EventEditPhonePortChange     (HISender pSender, HKEvent pEvent);
-    void EventEditListenPortChange    (HISender pSender, HKEvent pEvent);
     void EventButtonAssignTargetClick (HISender pSender, HKEvent pEvent);
     void EventButtonClearTargetClick  (HISender pSender, HKEvent pEvent);
+    void EventButtonRelayEnableClick  (HISender pSender, HKEvent pEvent);
+    void EventEditRelayIpChange       (HISender pSender, HKEvent pEvent);
+    void EventEditRelayPortChange     (HISender pSender, HKEvent pEvent);
 
 private:
     FBTabPanel  mTabPanel;
@@ -62,24 +63,26 @@ private:
         FBButton      mButtonAbout;
 
     FBLayout    mLayoutCommunication;
-        FBLabel       mLabelProtocol;
-        FBList        mListProtocol;
-        FBLabel       mLabelTransport;
-        FBList        mListTransport;
+        FBLabel       mLabelSource;
+        FBList        mListSource;
         FBLabel       mLabelPhoneIp;
         FBEdit        mEditPhoneIp;
         FBLabel       mLabelPhonePort;
         FBEdit        mEditPhonePort;
-        FBLabel       mLabelListenPort;
-        FBEdit        mEditListenPort;
-        FBLabel       mLabelTarget;
-        FBEdit        mEditTargetName;       // read-only display
+        FBLabel       mLabelTarget;            // shows "Blendshape Target: <name>"
         FBButton      mButtonAssignTarget;
         FBButton      mButtonClearTarget;
+        FBLabel       mLabelRelayHdr;          // divider/header
+        FBButton      mButtonRelayEnable;      // 2-state toggle
+        FBLabel       mLabelRelayIp;
+        FBEdit        mEditRelayIp;
+        FBLabel       mLabelRelayPort;
+        FBEdit        mEditRelayPort;
 
     FBLayout    mLayoutLive;
         FBLabel       mLabelLiveStatus;
         FBLabel       mLabelLiveFrames;
+        FBLabel       mLabelLiveRelay;
         FBLabel       mLabelLiveHeadRot;
         FBLabel       mLabelLiveHeadPos;
         FBLabel       mLabelLiveLeftEye;

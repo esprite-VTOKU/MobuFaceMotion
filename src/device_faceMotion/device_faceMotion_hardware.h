@@ -52,6 +52,17 @@ public:
     void SetStreaming(bool b)     { mStreaming = b; }
     bool GetStreaming() const     { return mStreaming; }
 
+    // Relay: each received packet is forwarded verbatim (UDP) to one
+    // additional destination. Useful for fan-out to other apps that speak
+    // the same protocol (e.g. Warudo accepts iFacialMocap-format UDP).
+    void  SetRelayEnabled(bool b) { mRelayEnabled = b; }
+    bool  GetRelayEnabled() const { return mRelayEnabled; }
+    void  SetRelayIp(const char* ip);
+    const char* GetRelayIp() const{ return mRelayIp; }
+    void  SetRelayPort(int p)     { mRelayPort = p; }
+    int   GetRelayPort() const    { return mRelayPort; }
+    uint64_t GetRelayCount() const{ return mRelayCount; }
+
     // Latest parsed sample (filled by FetchData) ----------------------------
     void GetPosition(double* out) const;
     void GetRotation(double* out) const;
@@ -94,4 +105,14 @@ private:
 
     uint64_t mFrameCount       = 0;
     int64_t  mLastFrameTickMs  = 0;
+
+    bool     mRelayEnabled = false;
+    char     mRelayIp[64]  = "";
+    int      mRelayPort    = 49983;
+    int      mRelaySocket  = 0;
+    uint64_t mRelayCount   = 0;
+
+    void OpenRelaySocket();
+    void CloseRelaySocket();
+    void ForwardRaw(const char* buf, int len);
 };

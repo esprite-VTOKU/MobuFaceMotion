@@ -59,6 +59,18 @@ public:
     void SetListenPort(int p) { mHardware.SetListenPort(p); }
     int  GetListenPort() const{ return mHardware.GetListenPort(); }
 
+    // Higher-level setter the layout uses: setting the iPhone port also
+    // updates the listen port in UDP mode (the convention is same-port).
+    void SetIPhonePort(int p);
+
+    void  SetRelayEnabled(bool b)  { mHardware.SetRelayEnabled(b); }
+    bool  GetRelayEnabled() const  { return mHardware.GetRelayEnabled(); }
+    void  SetRelayIp(const char* s){ mHardware.SetRelayIp(s); }
+    const char* GetRelayIp() const { return mHardware.GetRelayIp(); }
+    void  SetRelayPort(int p)      { mHardware.SetRelayPort(p); }
+    int   GetRelayPort() const     { return mHardware.GetRelayPort(); }
+    uint64_t GetRelayCount() const { return mHardware.GetRelayCount(); }
+
     bool GetSetCandidate() const         { return mSetCandidate; }
     void SetSetCandidate(bool b)         { mSetCandidate = b; }
 

@@ -61,6 +61,13 @@ void CDevice_FaceMotion_Hardware::SetPhoneIp(const char* ip)
     mPhoneIp[sizeof(mPhoneIp) - 1] = 0;
 }
 
+void CDevice_FaceMotion_Hardware::SetRelayIp(const char* ip)
+{
+    if (!ip) { mRelayIp[0] = 0; return; }
+    std::strncpy(mRelayIp, ip, sizeof(mRelayIp) - 1);
+    mRelayIp[sizeof(mRelayIp) - 1] = 0;
+}
+
 bool CDevice_FaceMotion_Hardware::Open()  { return true; }
 bool CDevice_FaceMotion_Hardware::Close() { return StopStream(); }
 
@@ -83,6 +90,8 @@ bool CDevice_FaceMotion_Hardware::StartStream()
     {
         for (int i = 0; i < 3; ++i) SendHandshakeUDP();
     }
+
+    if (mRelayEnabled) OpenRelaySocket();
     return true;
 }
 
@@ -96,6 +105,41 @@ void CDevice_FaceMotion_Hardware::CloseSockets()
 {
     if (mSocket)    { closesocket(static_cast<SOCKET>(mSocket));    mSocket = 0; }
     if (mTcpServer) { closesocket(static_cast<SOCKET>(mTcpServer)); mTcpServer = 0; }
+    CloseRelaySocket();
+}
+
+void CDevice_FaceMotion_Hardware::OpenRelaySocket()
+{
+    CloseRelaySocket();
+    const SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s == INVALID_SOCKET) return;
+    SetNonBlocking(static_cast<int>(s));
+    mRelaySocket = static_cast<int>(s);
+}
+
+void CDevice_FaceMotion_Hardware::CloseRelaySocket()
+{
+    if (mRelaySocket)
+    {
+        closesocket(static_cast<SOCKET>(mRelaySocket));
+        mRelaySocket = 0;
+    }
+}
+
+void CDevice_FaceMotion_Hardware::ForwardRaw(const char* buf, int len)
+{
+    if (!mRelayEnabled || !mRelayIp[0] || mRelayPort <= 0) return;
+    if (!mRelaySocket) OpenRelaySocket();
+    if (!mRelaySocket) return;
+
+    sockaddr_in dst = {};
+    dst.sin_family = AF_INET;
+    dst.sin_port   = htons(static_cast<uint16_t>(mRelayPort));
+    if (inet_pton(AF_INET, mRelayIp, &dst.sin_addr) != 1) return;
+
+    const int sent = sendto(static_cast<SOCKET>(mRelaySocket), buf, len, 0,
+                            reinterpret_cast<sockaddr*>(&dst), sizeof(dst));
+    if (sent == len) ++mRelayCount;
 }
 
 bool CDevice_FaceMotion_Hardware::SendHandshakeUDP()
@@ -221,6 +265,11 @@ int CDevice_FaceMotion_Hardware::FetchData()
             ++mFrameCount;
             mLastFrameTickMs = static_cast<int64_t>(GetTickCount64());
             frames = 1;
+
+            // Forward raw bytes to the relay destination (if enabled). We
+            // forward AFTER parse success so malformed packets don't pollute
+            // the downstream listener.
+            ForwardRaw(mBuffer, n);
         }
     }
 

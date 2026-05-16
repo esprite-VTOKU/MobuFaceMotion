@@ -96,6 +96,13 @@ void CDevice_FaceMotion::SetTransport(int t)
     CommType = (trans == ETransport::TCP) ? kFBCommTypeNetworkTCP : kFBCommTypeNetworkUDP;
 }
 
+void CDevice_FaceMotion::SetIPhonePort(int port)
+{
+    mHardware.SetPhonePort(port);
+    if (mHardware.GetTransport() == ETransport::UDP)
+        mHardware.SetListenPort(port);
+}
+
 bool CDevice_FaceMotion::DeviceOperation(kDeviceOperations pOp)
 {
     switch (pOp)

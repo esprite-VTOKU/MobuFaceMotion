@@ -20,6 +20,56 @@ FBRegisterDeviceLayout(CDEVICEFACEMOTION__LAYOUT,
 
 using namespace mobufacemotion;
 
+namespace {
+
+// Encode (protocol, transport) -> Source picker index. Order matches the
+// items added in UIConfigureLayoutCommunication.
+int SourceIndexFor(int protocol, int transport)
+{
+    const EProtocol  p = static_cast<EProtocol>(protocol);
+    const ETransport t = static_cast<ETransport>(transport);
+    if (p == EProtocol::iFacialMocapV2 && t == ETransport::UDP) return 0;
+    if (p == EProtocol::iFacialMocapV2 && t == ETransport::TCP) return 1;
+    if (p == EProtocol::FaceMotion3D   && t == ETransport::UDP) return 2;
+    if (p == EProtocol::FaceMotion3D   && t == ETransport::TCP) return 3;
+    if (p == EProtocol::iFacialMocapV1 && t == ETransport::UDP) return 4;
+    return 0;
+}
+
+// Decode Source picker index -> (protocol, transport).
+void DecodeSource(int idx, EProtocol& proto, ETransport& trans)
+{
+    switch (idx)
+    {
+        default:
+        case 0: proto = EProtocol::iFacialMocapV2; trans = ETransport::UDP; break;
+        case 1: proto = EProtocol::iFacialMocapV2; trans = ETransport::TCP; break;
+        case 2: proto = EProtocol::FaceMotion3D;   trans = ETransport::UDP; break;
+        case 3: proto = EProtocol::FaceMotion3D;   trans = ETransport::TCP; break;
+        case 4: proto = EProtocol::iFacialMocapV1; trans = ETransport::UDP; break;
+    }
+}
+
+// Pretty-format an age in milliseconds for the Live tab's "last packet" line.
+// Tiers: <1s "N ms", <1min "S.S s", <1h "Mm Ss", <1d "Hh Mm", else "Dd Hh".
+void FormatAge(int64_t ms, char* out, size_t cap)
+{
+    if (ms < 0)              { std::snprintf(out, cap, "-");                                       return; }
+    if (ms < 1000)           { std::snprintf(out, cap, "%lld ms",   static_cast<long long>(ms));   return; }
+    if (ms < 60000)          { std::snprintf(out, cap, "%.1f s",    ms / 1000.0);                  return; }
+    if (ms < 3600000)        { std::snprintf(out, cap, "%lldm %llds",
+                                  static_cast<long long>(ms / 60000),
+                                  static_cast<long long>((ms / 1000) % 60));                       return; }
+    if (ms < 86400000LL)     { std::snprintf(out, cap, "%lldh %lldm",
+                                  static_cast<long long>(ms / 3600000),
+                                  static_cast<long long>((ms / 60000) % 60));                      return; }
+    std::snprintf(out, cap, "%lldd %lldh",
+                  static_cast<long long>(ms / 86400000LL),
+                  static_cast<long long>((ms / 3600000) % 24));
+}
+
+} // namespace
+
 bool CDevice_FaceMotion_Layout::FBCreate()
 {
     mDevice = static_cast<CDevice_FaceMotion*>(static_cast<FBDevice*>(Device));
@@ -110,11 +160,9 @@ void CDevice_FaceMotion_Layout::UICreateLayoutGeneral()
 void CDevice_FaceMotion_Layout::UICreateLayoutCommunication()
 {
     const int lS = 4, lH = 18;
-    const int lblW = 90, valW = 160;
+    const int lblW = 130, valW = 200;
 
     auto rowLabel = [&](const char* id, const char* anchor) {
-        // First row attaches to the top edge of the parent layout (anchor="");
-        // subsequent rows stack below the previous label.
         if (anchor[0])
         {
             mLayoutCommunication.AddRegion(id, id,
@@ -140,17 +188,21 @@ void CDevice_FaceMotion_Layout::UICreateLayoutCommunication()
             0,     kFBAttachHeight,anchor, 1.0);
     };
 
-    rowLabel("LabelProtocol",  "");           rowField("ListProtocol",    "LabelProtocol",  valW);
-    rowLabel("LabelTransport", "LabelProtocol");  rowField("ListTransport",   "LabelTransport", valW);
-    rowLabel("LabelPhoneIp",   "LabelTransport"); rowField("EditPhoneIp",     "LabelPhoneIp",   valW);
-    rowLabel("LabelPhonePort", "LabelPhoneIp");   rowField("EditPhonePort",   "LabelPhonePort", 80);
-    rowLabel("LabelListenPort","LabelPhonePort"); rowField("EditListenPort",  "LabelListenPort",80);
-    rowLabel("LabelTarget",    "LabelListenPort");rowField("EditTargetName",  "LabelTarget",    valW);
+    // Source app
+    rowLabel("LabelSource",     "");
+    rowField("ListSource",      "LabelSource",     valW);
 
-    // Buttons under the target row
+    // iPhone connection
+    rowLabel("LabelPhoneIp",    "LabelSource");
+    rowField("EditPhoneIp",     "LabelPhoneIp",    valW);
+    rowLabel("LabelPhonePort",  "LabelPhoneIp");
+    rowField("EditPhonePort",   "LabelPhonePort",  80);
+
+    // Blendshape target (label updates with current binding)
+    rowLabel("LabelTarget",     "LabelPhonePort");
     mLayoutCommunication.AddRegion("ButtonAssignTarget", "ButtonAssignTarget",
-        lS,  kFBAttachRight,  "LabelTarget",     1.0,
-        lS,  kFBAttachBottom, "EditTargetName",  1.0,
+        lS,  kFBAttachLeft,   "LabelTarget",     1.0,
+        lS,  kFBAttachBottom, "LabelTarget",     1.0,
         140, kFBAttachNone,   nullptr,            1.0,
         lH,  kFBAttachNone,   nullptr,            1.0);
     mLayoutCommunication.AddRegion("ButtonClearTarget", "ButtonClearTarget",
@@ -159,26 +211,39 @@ void CDevice_FaceMotion_Layout::UICreateLayoutCommunication()
         60,  kFBAttachNone,   nullptr,               1.0,
         0,   kFBAttachHeight, "ButtonAssignTarget",  1.0);
 
-    mLayoutCommunication.SetControl("LabelProtocol",       mLabelProtocol);
-    mLayoutCommunication.SetControl("ListProtocol",        mListProtocol);
-    mLayoutCommunication.SetControl("LabelTransport",      mLabelTransport);
-    mLayoutCommunication.SetControl("ListTransport",       mListTransport);
+    // Relay section
+    rowLabel("LabelRelayHdr",   "ButtonAssignTarget");
+    mLayoutCommunication.AddRegion("ButtonRelayEnable", "ButtonRelayEnable",
+        lS,  kFBAttachLeft,   "LabelRelayHdr",   1.0,
+        lS,  kFBAttachBottom, "LabelRelayHdr",   1.0,
+        200, kFBAttachNone,   nullptr,            1.0,
+        lH,  kFBAttachNone,   nullptr,            1.0);
+    rowLabel("LabelRelayIp",    "ButtonRelayEnable");
+    rowField("EditRelayIp",     "LabelRelayIp",    valW);
+    rowLabel("LabelRelayPort",  "LabelRelayIp");
+    rowField("EditRelayPort",   "LabelRelayPort",  80);
+
+    mLayoutCommunication.SetControl("LabelSource",         mLabelSource);
+    mLayoutCommunication.SetControl("ListSource",          mListSource);
     mLayoutCommunication.SetControl("LabelPhoneIp",        mLabelPhoneIp);
     mLayoutCommunication.SetControl("EditPhoneIp",         mEditPhoneIp);
     mLayoutCommunication.SetControl("LabelPhonePort",      mLabelPhonePort);
     mLayoutCommunication.SetControl("EditPhonePort",       mEditPhonePort);
-    mLayoutCommunication.SetControl("LabelListenPort",     mLabelListenPort);
-    mLayoutCommunication.SetControl("EditListenPort",      mEditListenPort);
     mLayoutCommunication.SetControl("LabelTarget",         mLabelTarget);
-    mLayoutCommunication.SetControl("EditTargetName",      mEditTargetName);
     mLayoutCommunication.SetControl("ButtonAssignTarget",  mButtonAssignTarget);
     mLayoutCommunication.SetControl("ButtonClearTarget",   mButtonClearTarget);
+    mLayoutCommunication.SetControl("LabelRelayHdr",       mLabelRelayHdr);
+    mLayoutCommunication.SetControl("ButtonRelayEnable",   mButtonRelayEnable);
+    mLayoutCommunication.SetControl("LabelRelayIp",        mLabelRelayIp);
+    mLayoutCommunication.SetControl("EditRelayIp",         mEditRelayIp);
+    mLayoutCommunication.SetControl("LabelRelayPort",      mLabelRelayPort);
+    mLayoutCommunication.SetControl("EditRelayPort",       mEditRelayPort);
 }
 
 void CDevice_FaceMotion_Layout::UICreateLayoutLive()
 {
     const int lS = 4, lH = 18;
-    const int rowW = 540;
+    const int rowW = 560;
 
     auto rowAt = [&](const char* id, const char* anchor) {
         if (anchor[0])
@@ -201,7 +266,8 @@ void CDevice_FaceMotion_Layout::UICreateLayoutLive()
 
     rowAt("LabelLiveStatus",        "");
     rowAt("LabelLiveFrames",        "LabelLiveStatus");
-    rowAt("LabelLiveHeadRot",       "LabelLiveFrames");
+    rowAt("LabelLiveRelay",         "LabelLiveFrames");
+    rowAt("LabelLiveHeadRot",       "LabelLiveRelay");
     rowAt("LabelLiveHeadPos",       "LabelLiveHeadRot");
     rowAt("LabelLiveLeftEye",       "LabelLiveHeadPos");
     rowAt("LabelLiveRightEye",      "LabelLiveLeftEye");
@@ -217,6 +283,7 @@ void CDevice_FaceMotion_Layout::UICreateLayoutLive()
 
     mLayoutLive.SetControl("LabelLiveStatus",         mLabelLiveStatus);
     mLayoutLive.SetControl("LabelLiveFrames",         mLabelLiveFrames);
+    mLayoutLive.SetControl("LabelLiveRelay",          mLabelLiveRelay);
     mLayoutLive.SetControl("LabelLiveHeadRot",        mLabelLiveHeadRot);
     mLayoutLive.SetControl("LabelLiveHeadPos",        mLabelLiveHeadPos);
     mLayoutLive.SetControl("LabelLiveLeftEye",        mLabelLiveLeftEye);
@@ -270,39 +337,42 @@ void CDevice_FaceMotion_Layout::UIConfigureLayoutGeneral()
 
 void CDevice_FaceMotion_Layout::UIConfigureLayoutCommunication()
 {
-    mLabelProtocol.Caption   = "Protocol :";
-    mListProtocol.Items.Add("iFacialMocap v1 (legacy)",   static_cast<int>(EProtocol::iFacialMocapV1));
-    mListProtocol.Items.Add("iFacialMocap v2",            static_cast<int>(EProtocol::iFacialMocapV2));
-    mListProtocol.Items.Add("FaceMotion3D",               static_cast<int>(EProtocol::FaceMotion3D));
-    mListProtocol.OnChange.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventListProtocolChange);
+    mLabelSource.Caption = "Source :";
+    // Order here MUST match SourceIndexFor / DecodeSource above.
+    mListSource.Items.Add("iFacialMocap (UDP)",         0);
+    mListSource.Items.Add("iFacialMocap (TCP)",         1);
+    mListSource.Items.Add("FaceMotion3D (UDP)",         2);
+    mListSource.Items.Add("FaceMotion3D (TCP)",         3);
+    mListSource.Items.Add("iFacialMocap v1 (legacy, UDP)", 4);
+    mListSource.OnChange.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventListSourceChange);
 
-    mLabelTransport.Caption  = "Transport :";
-    mListTransport.Items.Add("UDP", static_cast<int>(ETransport::UDP));
-    mListTransport.Items.Add("TCP", static_cast<int>(ETransport::TCP));
-    mListTransport.OnChange.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventListTransportChange);
-
-    mLabelPhoneIp.Caption    = "Phone IP :";
+    mLabelPhoneIp.Caption = "iPhone IP Address :";
     mEditPhoneIp.OnChange.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventEditPhoneIpChange);
 
-    mLabelPhonePort.Caption  = "Phone Port :";
+    mLabelPhonePort.Caption = "iPhone Port :";
     mEditPhonePort.OnChange.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventEditPhonePortChange);
 
-    mLabelListenPort.Caption = "Listen Port :";
-    mEditListenPort.OnChange.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventEditListenPortChange);
-
-    mLabelTarget.Caption     = "Blendshape Target :";
-    mEditTargetName.Enabled  = false;
-
+    // mLabelTarget gets its caption rewritten by UIReset to include current name.
     mButtonAssignTarget.Caption = "Assign From Selection";
     mButtonAssignTarget.OnClick.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventButtonAssignTargetClick);
     mButtonClearTarget.Caption  = "Clear";
     mButtonClearTarget.OnClick.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventButtonClearTargetClick);
+
+    mLabelRelayHdr.Caption = "--- Relay (forward each packet to another app, e.g. Warudo) ---";
+    mButtonRelayEnable.Style.SetPropertyValue(kFB2States);
+    mButtonRelayEnable.Caption = "Enable Relay";
+    mButtonRelayEnable.OnClick.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventButtonRelayEnableClick);
+    mLabelRelayIp.Caption   = "Relay To IP :";
+    mEditRelayIp.OnChange.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventEditRelayIpChange);
+    mLabelRelayPort.Caption = "Relay To Port :";
+    mEditRelayPort.OnChange.Add(this, (FBCallback)&CDevice_FaceMotion_Layout::EventEditRelayPortChange);
 }
 
 void CDevice_FaceMotion_Layout::UIConfigureLayoutLive()
 {
     mLabelLiveStatus.Caption         = "Status: Offline";
     mLabelLiveFrames.Caption         = "Frames received: 0";
+    mLabelLiveRelay.Caption          = "Relay: disabled";
     mLabelLiveHeadRot.Caption        = "Head rotation : -";
     mLabelLiveHeadPos.Caption        = "Head position : -";
     mLabelLiveLeftEye.Caption        = "Left eye      : -";
@@ -316,41 +386,55 @@ void CDevice_FaceMotion_Layout::UIRefresh()
     if (!mDevice) return;
 
     char buf[256];
+    char ageBuf[32];
 
-    // Status line: combine device Online/Live + whether packets are flowing.
-    const uint64_t frames  = mDevice->GetFrameCount();
-    const int64_t  lastMs  = mDevice->GetLastFrameTickMs();
-    const int64_t  nowMs   = static_cast<int64_t>(GetTickCount64());
-    const int64_t  ageMs   = (lastMs > 0) ? (nowMs - lastMs) : -1;
+    const uint64_t frames = mDevice->GetFrameCount();
+    const int64_t  lastMs = mDevice->GetLastFrameTickMs();
+    const int64_t  nowMs  = static_cast<int64_t>(GetTickCount64());
+    const int64_t  ageMs  = (lastMs > 0) ? (nowMs - lastMs) : -1;
 
     const char* state;
     if      (!mDevice->Online)             state = "Offline";
     else if (!mDevice->Live)               state = "Online (not Live)";
-    else if (frames == 0)                  state = "Live, no packets yet -- check Phone IP + handshake";
+    else if (frames == 0)                  state = "Live, no packets yet -- check iPhone IP";
     else if (ageMs >= 0 && ageMs > 1500)   state = "Live, stream stalled";
     else                                   state = "Live, receiving";
 
     const char* ip = mDevice->GetPhoneIp();
     std::snprintf(buf, sizeof(buf),
-                  "Status: %s   |   Phone: %s:%d   |   Listen: %d",
+                  "Status: %s   |   iPhone: %s:%d",
                   state,
                   (ip && ip[0]) ? ip : "<not set>",
-                  mDevice->GetPhonePort(),
-                  mDevice->GetListenPort());
+                  mDevice->GetPhonePort());
     mLabelLiveStatus.Caption = buf;
 
     if (lastMs > 0)
     {
+        FormatAge(ageMs, ageBuf, sizeof(ageBuf));
         std::snprintf(buf, sizeof(buf),
-                      "Frames received: %llu   |   Last packet: %lld ms ago",
-                      static_cast<unsigned long long>(frames),
-                      static_cast<long long>(ageMs));
+                      "Frames received: %llu   |   Last packet: %s ago",
+                      static_cast<unsigned long long>(frames), ageBuf);
     }
     else
     {
         std::snprintf(buf, sizeof(buf), "Frames received: 0");
     }
     mLabelLiveFrames.Caption = buf;
+
+    if (mDevice->GetRelayEnabled())
+    {
+        const char* rip = mDevice->GetRelayIp();
+        std::snprintf(buf, sizeof(buf),
+                      "Relay: ON  ->  %s:%d   |   Forwarded: %llu",
+                      (rip && rip[0]) ? rip : "<not set>",
+                      mDevice->GetRelayPort(),
+                      static_cast<unsigned long long>(mDevice->GetRelayCount()));
+    }
+    else
+    {
+        std::snprintf(buf, sizeof(buf), "Relay: disabled");
+    }
+    mLabelLiveRelay.Caption = buf;
 
     double v3[3];
     mDevice->GetHeadRotation(v3);
@@ -373,7 +457,6 @@ void CDevice_FaceMotion_Layout::UIRefresh()
                   v3[0], v3[1], v3[2]);
     mLabelLiveRightEye.Caption = buf;
 
-    // Top 8 blendshapes by absolute value.
     struct Entry { int idx; double val; };
     Entry top[mobufacemotion::kBlendshapeCount];
     for (uint32_t i = 0; i < mobufacemotion::kBlendshapeCount; ++i)
@@ -404,25 +487,30 @@ void CDevice_FaceMotion_Layout::UIRefresh()
 
 void CDevice_FaceMotion_Layout::UIReset()
 {
-    char buf[64];
+    char buf[128];
 
     mEditNumberSamplingRate.Value = 1.0 / static_cast<FBTime>(mDevice->SamplingPeriod).GetSecondDouble();
     mListSamplingType.ItemIndex   = mListSamplingType.Items.Find(mDevice->SamplingMode.AsInt());
     mButtonSetCandidate.State     = mDevice->GetSetCandidate() ? 1 : 0;
 
-    mListProtocol.ItemIndex  = mListProtocol.Items.Find(mDevice->GetProtocol());
-    mListTransport.ItemIndex = mListTransport.Items.Find(mDevice->GetTransport());
+    mListSource.ItemIndex = SourceIndexFor(mDevice->GetProtocol(), mDevice->GetTransport());
 
-    mEditPhoneIp.Text  = mDevice->GetPhoneIp();
+    mEditPhoneIp.Text = mDevice->GetPhoneIp();
     std::snprintf(buf, sizeof(buf), "%d", mDevice->GetPhonePort());
-    mEditPhonePort.Text  = buf;
-    std::snprintf(buf, sizeof(buf), "%d", mDevice->GetListenPort());
-    mEditListenPort.Text = buf;
+    mEditPhonePort.Text = buf;
 
     FBModel* target = (mDevice->BlendshapeTarget.GetCount() > 0)
         ? static_cast<FBModel*>(mDevice->BlendshapeTarget.GetAt(0))
         : nullptr;
-    mEditTargetName.Text = target ? target->LongName : "(none)";
+    std::snprintf(buf, sizeof(buf), "Blendshape Target: %s",
+                  target ? target->LongName.AsString() : "(none)");
+    mLabelTarget.Caption = buf;
+
+    mButtonRelayEnable.State = mDevice->GetRelayEnabled() ? 1 : 0;
+    mButtonRelayEnable.Caption = mDevice->GetRelayEnabled() ? "Relay ON" : "Enable Relay";
+    mEditRelayIp.Text = mDevice->GetRelayIp();
+    std::snprintf(buf, sizeof(buf), "%d", mDevice->GetRelayPort());
+    mEditRelayPort.Text = buf;
 }
 
 // -- Event handlers ----------------------------------------------------------
@@ -487,17 +575,13 @@ void CDevice_FaceMotion_Layout::EventButtonAboutClick(HISender, HKEvent)
                  "Ok");
 }
 
-void CDevice_FaceMotion_Layout::EventListProtocolChange(HISender, HKEvent)
+void CDevice_FaceMotion_Layout::EventListSourceChange(HISender, HKEvent)
 {
-    const int p = static_cast<int>(mListProtocol.Items.GetReferenceAt(mListProtocol.ItemIndex));
-    mDevice->SetProtocol(p);
-    UIReset();
-}
-
-void CDevice_FaceMotion_Layout::EventListTransportChange(HISender, HKEvent)
-{
-    const int t = static_cast<int>(mListTransport.Items.GetReferenceAt(mListTransport.ItemIndex));
-    mDevice->SetTransport(t);
+    EProtocol  p;
+    ETransport t;
+    DecodeSource(mListSource.ItemIndex, p, t);
+    mDevice->SetProtocol(static_cast<int>(p));
+    mDevice->SetTransport(static_cast<int>(t));
     UIReset();
 }
 
@@ -509,13 +593,7 @@ void CDevice_FaceMotion_Layout::EventEditPhoneIpChange(HISender, HKEvent)
 void CDevice_FaceMotion_Layout::EventEditPhonePortChange(HISender, HKEvent)
 {
     int port = std::atoi(mEditPhonePort.Text.AsString());
-    if (port > 0) mDevice->SetPhonePort(port);
-}
-
-void CDevice_FaceMotion_Layout::EventEditListenPortChange(HISender, HKEvent)
-{
-    int port = std::atoi(mEditListenPort.Text.AsString());
-    if (port > 0) mDevice->SetListenPort(port);
+    if (port > 0) mDevice->SetIPhonePort(port);
 }
 
 void CDevice_FaceMotion_Layout::EventButtonAssignTargetClick(HISender, HKEvent)
@@ -538,4 +616,21 @@ void CDevice_FaceMotion_Layout::EventButtonClearTargetClick(HISender, HKEvent)
 {
     mDevice->BlendshapeTarget.Clear();
     UIReset();
+}
+
+void CDevice_FaceMotion_Layout::EventButtonRelayEnableClick(HISender, HKEvent)
+{
+    mDevice->SetRelayEnabled(mButtonRelayEnable.State != 0);
+    UIReset();
+}
+
+void CDevice_FaceMotion_Layout::EventEditRelayIpChange(HISender, HKEvent)
+{
+    mDevice->SetRelayIp(mEditRelayIp.Text.AsString());
+}
+
+void CDevice_FaceMotion_Layout::EventEditRelayPortChange(HISender, HKEvent)
+{
+    int port = std::atoi(mEditRelayPort.Text.AsString());
+    if (port > 0) mDevice->SetRelayPort(port);
 }
