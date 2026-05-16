@@ -1,0 +1,34 @@
+# Build output
+build/
+out/
+bin/
+*.dll
+*.pdb
+*.lib
+*.exp
+*.obj
+*.ilk
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+
+# Visual Studio / IDE
+.vs/
+.vscode/
+*.suo
+*.user
+*.sdf
+*.opensdf
+*.vcxproj
+*.vcxproj.filters
+*.sln
+
+# OS / misc
+Thumbs.db
+.DS_Store
