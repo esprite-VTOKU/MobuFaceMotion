@@ -10,13 +10,34 @@ family text protocols instead (no OSC dependency).
 
 ## Status
 
-Source-only scaffold. Build on a Windows machine with MotionBuilder and the
-OpenRealitySDK installed; see [docs/building.md](docs/building.md).
+**v0.1.0 — first tester release.** A built `.dll` for MotionBuilder 2027 is
+attached to the [latest GitHub release](https://github.com/esprite-VTOKU/MobuFaceMotion/releases/latest);
+see *Quick install* below.
+
+End-to-end streaming verified against iFacialMocap on iPhone (UDP).
+FaceMotion3D / TCP paths share the same parser and are expected to work;
+testing feedback welcome.
+
+## Quick install (MoBu 2027)
+
+1. **Close MotionBuilder** if it's running.
+2. Download `device_faceMotion.dll` from the
+   [latest release](https://github.com/esprite-VTOKU/MobuFaceMotion/releases/latest).
+3. Copy it into `C:\Program Files\Autodesk\MotionBuilder 2027\bin\x64\plugins\`
+   (requires admin).
+4. Launch MotionBuilder. Asset Browser -> Devices -> drag *FaceMotion
+   (iFacialMocap / FaceMotion3D)* into the scene.
+5. On the device's Communication tab: set Protocol, enter your iPhone's
+   LAN IP, toggle **Online** then **Live**.
+6. The **Live** tab shows the streaming status, frame counter, and the
+   live head/eye/blendshape values.
 
 ## Supported MotionBuilder versions
 
-2022, 2023, 2024, 2025, 2026. Build one `.dll` per version by setting
-`PRODUCT_VERSION.txt` (or passing `-DMOBU_VERSION=<ver>` at configure time).
+2022 - 2027 (source-level). Pre-built `.dll` currently attached only for
+**2027**. To build for a different version, set `PRODUCT_VERSION.txt`
+(or pass `-DMOBU_VERSION=<ver>` at configure) and see
+[docs/building.md](docs/building.md).
 
 ## Supported source apps
 
